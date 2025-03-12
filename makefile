@@ -1,1 +1,1 @@
-sound_seg.so:
+sound_seg.o:
