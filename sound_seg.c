@@ -15,7 +15,7 @@ struct sound_seg
     //  represents one audio track
 };
 
-void get_file_size(const char *filename, long *size)
+int get_file_size(const char *filename, long *size)
 {
     if (filename == NULL || size == NULL)
     {
@@ -25,7 +25,7 @@ void get_file_size(const char *filename, long *size)
     FILE *file = fopen(filename, "rb");
     if (file == NULL)
     {
-        return -1; // File couldn't be opened
+        return -1; // idk if i need to account for this? i think its assumed that it will be ok?
     }
 
     fseek(file, 0, SEEK_END); // Move to end
