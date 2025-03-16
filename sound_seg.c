@@ -45,9 +45,7 @@ void wav_load(const char *filename, int16_t *dest)
     get_file_size(filename, &file_size);
     size_t num_samples = (file_size - 44) / sizeof(int16_t);
 
-    FILE *fptr;
-
-    fopen(filename, "rb"); // assuming IO operations are always successful.
+    FILE *fptr = fopen(filename, "rb"); // assuming IO operations are always successful.
 
     fread(dest, sizeof(int16_t), num_samples, fptr);
     fclose(fptr);
@@ -58,8 +56,41 @@ void wav_save(const char *fname, int16_t *src, size_t len)
 {
     // fname maybe already exist or need to be created
     // src contains the audio sample
-    // need to create the necessary header also (44 bytes)
+    // need to create the necessary header also (44 bytes) - hw do i do this?
     // the song will always be PCM, 16 bits per sample, mono, 8000Hz sample rate.?  -useful for the header
+
+    FILE *fptr = fopen(fname, "wb");
+
+    // WAV Header values
+    uint32_t chunk_size = 44 + (len * sizeof(int16_t)) - 8;
+    uint32_t chunk2_size = 16;
+    uint16_t audio_format = 1; // PCM
+    uint16_t num_channels = 1; // mono
+    uint32_t sample_rate = 8000;
+    uint16_t bits_per_sample = 16;
+    uint16_t block_align = num_channels * (bits_per_sample / 8);
+    uint32_t byte_rate = sample_rate * block_align;
+    uint32_t chunk3_size = len * sizeof(int16_t);
+
+    fwrite("RIFF", 4, 1, fptr);           // ckID
+    fwrite(&chunk_size, 4, 1, fptr);      // cksize
+    fwrite("WAVE", 4, 1, fptr);           // WAVEID
+    fwrite("fmt ", 4, 1, fptr);           // ckID
+    fwrite(&chunk2_size, 4, 1, fptr);     // cksize
+    fwrite(&audio_format, 2, 1, fptr);    // wFormatTag
+    fwrite(&num_channels, 2, 1, fptr);    // nChannels
+    fwrite(&sample_rate, 4, 1, fptr);     // nSamplesPerSec
+    fwrite(&byte_rate, 4, 1, fptr);       // nAvgBytesPerSec
+    fwrite(&block_align, 2, 1, fptr);     // nBlockAlign
+    fwrite(&bits_per_sample, 2, 1, fptr); // wBitsPerSample
+    fwrite("data", 4, 1, fptr);           // ckID
+    fwrite(&chunk3_size, 4, 1, fptr);     // cksize
+
+    // write the actual data contained in source
+    fwrite(src, sizeof(int16_t), len, fptr);
+
+    fclose(fptr);
+
     return;
 }
 
