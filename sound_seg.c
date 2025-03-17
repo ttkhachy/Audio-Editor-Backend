@@ -7,11 +7,11 @@
 
 struct sound_seg
 {
-    // int16_t* data;      // Pointer to raw PCM audio samples
-    // size_t length;      // Number of samples
-    // size_t start_pos;   // Starting position in the shared buffer (for inserts)
-    // struct sound_seg* parent;  // Pointer to parent segment (for shared backing)
-    // int ref_count;      // Reference count for shared memory tracking
+    int16_t *data;            // Pointer to raw PCM audio samples
+    size_t length;            // Number of samples
+    size_t start_pos;         // Starting position in the shared buffer (for inserts)
+    struct sound_seg *parent; // Pointer to parent segment (for shared backing)
+    int ref_count;            // Reference count for shared memory tracking
     //  represents one audio track
 };
 
@@ -19,7 +19,7 @@ int get_file_size(const char *filename, long *size)
 {
     if (filename == NULL || size == NULL)
     {
-        return -1; // Invalid arguments
+        return -1; // invalid arguments - although i think i assume its always correct?
     }
 
     FILE *file = fopen(filename, "rb");
@@ -28,10 +28,10 @@ int get_file_size(const char *filename, long *size)
         return -1; // idk if i need to account for this? i think its assumed that it will be ok?
     }
 
-    fseek(file, 0, SEEK_END); // Move to end
-    *size = ftell(file);      // Get file position (size)
+    fseek(file, 0, SEEK_END);
+    *size = ftell(file); // get file position (size)
 
-    fclose(file); // Close file
+    fclose(file); // cant forget the close
     return 0;
 }
 
@@ -99,12 +99,31 @@ void wav_save(const char *fname, int16_t *src, size_t len)
 // Initialize a new sound_seg object
 struct sound_seg *tr_init()
 {
-    return NULL;
+    // do i need to malloc just the pointer or also the values in the pointer
+    struct sound_seg *track = malloc(sizeof(struct sound_seg));
+    if (track == NULL)
+    {
+        return NULL;
+    }
+
+    track->data = NULL; // no buffer yet, allocate in tr_write()
+    track->length = 0;  // no samples yet
+    track->start_pos = 0;
+    track->ref_count = 1; // default reference count
+    // track->capacity = 0;  // track buffer size not sure yet if i need thei field - will see as i go.
+
+    // If your struct has a pointer to an audio buffer, initialize it to NULL.
+    return track;
 }
 
 // Destroy a sound_seg object and free all allocated memory
 void tr_destroy(struct sound_seg *obj)
 {
+
+    // The caller is responsible for freeing the memory later (tr_destroy()) - need to free the memory that was allocated by tr_init
+    //  Frees the track’s audio data (if needed).
+    // Frees the track itself.
+
     return;
 }
 
