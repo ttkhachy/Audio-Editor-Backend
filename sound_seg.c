@@ -32,12 +32,12 @@ int get_file_size(const char *filename, long *size)
     *size = ftell(file);      // Get file position (size)
 
     fclose(file); // Close file
+    return 0;
 }
 
 // Load a WAV file into buffer
 void wav_load(const char *filename, int16_t *dest)
 {
-    return;
     // i think the header is 44 bytes long
     // need to read the file from filename -> skip the first 44 bytes and then copy the remaining data
     // (which should be the raw audio data into dest)
@@ -46,9 +46,11 @@ void wav_load(const char *filename, int16_t *dest)
     size_t num_samples = (file_size - 44) / sizeof(int16_t);
 
     FILE *fptr = fopen(filename, "rb"); // assuming IO operations are always successful.
+    fseek(fptr, 44, SEEK_SET);
 
     fread(dest, sizeof(int16_t), num_samples, fptr);
     fclose(fptr);
+    return;
 }
 
 // Create/write a WAV file from buffer
