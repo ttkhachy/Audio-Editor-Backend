@@ -99,6 +99,7 @@ void wav_save(const char *fname, int16_t *src, size_t len)
 // Initialize a new sound_seg object
 struct sound_seg *tr_init()
 {
+    // tried to git push at 2:27 on 18th but it didnt work
     // do i need to malloc just the pointer or also the values in the pointer
     struct sound_seg *track = malloc(sizeof(struct sound_seg));
     if (track == NULL)
@@ -119,9 +120,17 @@ struct sound_seg *tr_init()
 // Destroy a sound_seg object and free all allocated memory
 void tr_destroy(struct sound_seg *obj)
 {
+    free(obj);
+
+    // Check if track is NULL before proceeding.
+    // Free track->data (only if this track owns it).
+    // Decrement ref_count if using shared memory.
+    // Free track itself.
+    // Set pointers to NULL after freeing to avoid dangling pointers.
+    // how do i delete the associated resources
 
     // The caller is responsible for freeing the memory later (tr_destroy()) - need to free the memory that was allocated by tr_init
-    //  Frees the track’s audio data (if needed).
+    // Frees the track’s audio data (if needed).
     // Frees the track itself.
 
     return;
