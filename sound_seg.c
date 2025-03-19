@@ -99,8 +99,6 @@ void wav_save(const char *fname, int16_t *src, size_t len)
 // Initialize a new sound_seg object
 struct sound_seg *tr_init()
 {
-    // tried to git push at 2:27 on 18th but it didnt work
-    // do i need to malloc just the pointer or also the values in the pointer
     struct sound_seg *track = malloc(sizeof(struct sound_seg));
     if (track == NULL)
     {
@@ -111,9 +109,8 @@ struct sound_seg *tr_init()
     track->length = 0;  // no samples yet
     track->start_pos = 0;
     track->ref_count = 1; // default reference count
-    // track->capacity = 0;  // track buffer size not sure yet if i need thei field - will see as i go.
+    // track->capacity = 0;  // track buffer size not sure yet if i need this field - will see as i go.
 
-    // If your struct has a pointer to an audio buffer, initialize it to NULL.
     return track;
 }
 
@@ -139,24 +136,76 @@ void tr_destroy(struct sound_seg *obj)
 // Return the length of the segment
 size_t tr_length(struct sound_seg *seg)
 {
-    return (size_t)-1;
+
+    if (seg == NULL)
+    {
+        return 0; // edge case: NULL pointer
+    }
+    return seg->length;
 }
 
 // Read len elements from position pos into dest
 void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
 {
+
+    if (track->data == NULL)
+    {
+        return;
+    }
+
+    if (pos + len > track->length)
+    {
+        return;
+    }
+
+    for (size_t i = 0; i < len; i++)
+    {
+        *(dest + i) = (track->data)[i + pos];
+    }
     return;
 }
 
 // Write len elements from src into position pos
 void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
 {
+    // i think tr_write can be called even the track is empty and also when the track has already been einitalised with values.
+    // so we either need to malloc just he size of what is being written,
+    // or we need to check if the written stuff will go over what is already allocated -> and then reallocate more memory to accomodate
+    // or the pos + len will be less than what has already been allocates so we just overwrite
+
+    size_t current_size = (sizeof(track->data) / sizeof(int16_t)); // not in bytes
+    if (track->data == NULL)
+    {
+        track->data = malloc(len * sizeof(int16_t));
+    }
+    else if (pos + len > current_size) // not it bytes
+    {
+        int16_t difference = pos + len - current_size; // not it bytes
+
+        track->data = realloc(track->data, (difference + track->length) * sizeof(int16_t));
+
+        // if it fails tho this means that the og data will be lost forever - should i work on a way to not lose it?
+    }
+
+    if (track->data == NULL)
+    {
+        return;
+    }
+
+    if (pos + len > track->length)
+    {
+        track->length = pos + len; // Extend length if writing past the end
+        // do i need to reallocate space here for the data buffer then?
+        // also at what point do i allocate space for the data?
+    }
+
     return;
 }
 
 // Delete a range of elements from the track
 bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
 {
+    track->length -= len;
     return true;
 }
 
@@ -171,5 +220,8 @@ void tr_insert(struct sound_seg *src_track,
                struct sound_seg *dest_track,
                size_t destpos, size_t srcpos, size_t len)
 {
+
+    // track->length += len;
+
     return;
 }
