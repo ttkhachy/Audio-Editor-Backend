@@ -12,7 +12,7 @@ struct sound_seg
     size_t start_pos;         // Starting position in the shared buffer (for inserts)
     struct sound_seg *parent; // Pointer to parent segment (for shared backing)
     int ref_count;            // Reference count for shared memory tracking
-    //  represents one audio track
+    size_t capacity;          // total allocated samples
 };
 
 int get_file_size(const char *filename, long *size)
@@ -117,18 +117,15 @@ struct sound_seg *tr_init()
 // Destroy a sound_seg object and free all allocated memory
 void tr_destroy(struct sound_seg *obj)
 {
-    free(obj);
-
-    // Check if track is NULL before proceeding.
-    // Free track->data (only if this track owns it).
-    // Decrement ref_count if using shared memory.
-    // Free track itself.
-    // Set pointers to NULL after freeing to avoid dangling pointers.
-    // how do i delete the associated resources
-
-    // The caller is responsible for freeing the memory later (tr_destroy()) - need to free the memory that was allocated by tr_init
-    // Frees the track’s audio data (if needed).
-    // Frees the track itself.
+    if (obj)
+    {
+        if (obj->data)
+        {
+            free(obj->data);
+        }
+        obj->ref_count--;
+        free(obj);
+    }
 
     return;
 }
@@ -168,43 +165,60 @@ void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
 // Write len elements from src into position pos
 void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
 {
-    // i think tr_write can be called even the track is empty and also when the track has already been einitalised with values.
-    // so we either need to malloc just he size of what is being written,
-    // or we need to check if the written stuff will go over what is already allocated -> and then reallocate more memory to accomodate
-    // or the pos + len will be less than what has already been allocates so we just overwrite
-
-    size_t current_size = (sizeof(track->data) / sizeof(int16_t)); // not in bytes
+    size_t total_new_length = pos + len;
     if (track->data == NULL)
     {
-        track->data = malloc(len * sizeof(int16_t));
+        // need to initialise struct values and malloc space for the samples
+        track->capacity = total_new_length;
+        track->data = malloc(track->capacity * sizeof(int16_t));
+        if (track->data == NULL)
+        {
+            // i.e an error occures
+            return;
+        }
     }
-    else if (pos + len > current_size) // not it bytes
+    else if (total_new_length > track->capacity)
     {
-        int16_t difference = pos + len - current_size; // not it bytes
+        size_t new_capacity = track->capacity;
+        // increase the capacity by doubling it until it is sufficenet to handle to whole new length
+        // see if this is in line with what is in the lectures?
+        while (new_capacity < total_new_length)
+        {
+            new_capacity *= 2;
+        }
 
-        track->data = realloc(track->data, (difference + track->length) * sizeof(int16_t));
-
-        // if it fails tho this means that the og data will be lost forever - should i work on a way to not lose it?
+        int16_t *temp = realloc(track->data, new_capacity * sizeof(int16_t));
+        if (temp == NULL)
+        {
+            return;
+        }
+        track->data = temp;
+        track->capacity = new_capacity;
     }
 
-    if (track->data == NULL)
+    for (size_t i = 0; i < len; i++)
     {
-        return;
+        track->data[i + pos] = *(src + i); // this part should be all? the main difficulty is the memory.
     }
 
-    if (pos + len > track->length)
+    if (total_new_length > track->length)
     {
-        track->length = pos + len; // Extend length if writing past the end
-        // do i need to reallocate space here for the data buffer then?
-        // also at what point do i allocate space for the data?
+        track->length = total_new_length;
     }
-
     return;
+
+    // idk if i should just reallocate excatly as the length increases or if i should do something like
+    // double to length each time? which is more/less iniefficient?
 }
 
 // Delete a range of elements from the track
 bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
 {
+
+    // can i just replace the pos - pos + len with the portion following pos+ len?
+    // then set the remaining bits as null? idk do i reduce the allocated space or just leave it as empty?
+    // need to let it marinate a bit and see what the best option is
+
     track->length -= len;
     return true;
 }
@@ -225,3 +239,6 @@ void tr_insert(struct sound_seg *src_track,
 
     return;
 }
+
+// for next time
+//  need to work on tr_destroy and tr_write memory stuff
