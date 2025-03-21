@@ -117,17 +117,24 @@ struct sound_seg *tr_init()
 // Destroy a sound_seg object and free all allocated memory
 void tr_destroy(struct sound_seg *obj)
 {
-    if (obj)
+    if (obj == NULL)
     {
-        if (obj->data)
+        return;
+    }
+
+    if (obj->ref_count == 1)
+    {
+        if (obj->data != NULL)
         {
             free(obj->data);
         }
-        obj->ref_count--;
-        free(obj);
     }
-
-    return;
+    else
+    {
+        // dont want to free the data yet since it is being used by an
+        obj->ref_count--;
+    }
+    free(obj);
 }
 
 // Return the length of the segment
@@ -195,20 +202,15 @@ void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
         track->data = temp;
         track->capacity = new_capacity;
     }
-
     for (size_t i = 0; i < len; i++)
     {
         track->data[i + pos] = *(src + i); // this part should be all? the main difficulty is the memory.
     }
-
     if (total_new_length > track->length)
     {
         track->length = total_new_length;
     }
     return;
-
-    // idk if i should just reallocate excatly as the length increases or if i should do something like
-    // double to length each time? which is more/less iniefficient?
 }
 
 // Delete a range of elements from the track
