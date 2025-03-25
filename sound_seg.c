@@ -233,16 +233,12 @@ bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
 
     memmove(track->data + pos, track->data + pos + len, (track->length - pos - len) * sizeof(int16_t));
 
-    for (int i = pos + len; i < track->length; i++)
-    {
-        track->data[i] = 0; // might not be necessary as we are adjusting the logical length
-    }
+    // for (int i = pos + len; i < track->length; i++)
+    // {
+    //     track->data[i] = 0; // might not be necessary as we are adjusting the logical length
+    // }
 
     // TODO - check if i must delete if the track is shared across multiple sounds?
-
-    // can i just replace the pos - pos + len with the portion following pos+ len?
-    // then set the remaining bits as null? idk do i reduce the allocated space or just leave it as empty?
-    // need to let it marinate a bit and see what the best option is
 
     track->length -= len;
     return true;
