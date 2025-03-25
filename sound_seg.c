@@ -109,7 +109,8 @@ struct sound_seg *tr_init()
     track->length = 0;  // no samples yet
     track->start_pos = 0;
     track->ref_count = 1; // default reference count
-    // track->capacity = 0;  // track buffer size not sure yet if i need this field - will see as i go.
+    track->capacity = 0;  // capacity will be determined on the first write call
+    track->parent = NULL;
 
     return track;
 }
@@ -127,6 +128,7 @@ void tr_destroy(struct sound_seg *obj)
         if (obj->data != NULL)
         {
             free(obj->data);
+            obj->data = NULL;
         }
     }
     else
@@ -135,6 +137,7 @@ void tr_destroy(struct sound_seg *obj)
         obj->ref_count--;
     }
     free(obj);
+    obj == NULL;
 }
 
 // Return the length of the segment
@@ -143,7 +146,7 @@ size_t tr_length(struct sound_seg *seg)
 
     if (seg == NULL)
     {
-        return 0; // edge case: NULL pointer
+        return 0; // edge case
     }
     return seg->length;
 }
@@ -217,6 +220,26 @@ void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
 bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
 {
 
+    if (track == NULL)
+    {
+        return false;
+    }
+    if (pos + len > track->length)
+    {
+        return false;
+    }
+
+    // when would the function return false?
+
+    memmove(track->data + pos, track->data + pos + len, (track->length - pos - len) * sizeof(int16_t));
+
+    for (int i = pos + len; i < track->length; i++)
+    {
+        track->data[i] = 0; // might not be necessary as we are adjusting the logical length
+    }
+
+    // TODO - check if i must delete if the track is shared across multiple sounds?
+
     // can i just replace the pos - pos + len with the portion following pos+ len?
     // then set the remaining bits as null? idk do i reduce the allocated space or just leave it as empty?
     // need to let it marinate a bit and see what the best option is
@@ -242,5 +265,9 @@ void tr_insert(struct sound_seg *src_track,
     return;
 }
 
-// for next time
-//  need to work on tr_destroy and tr_write memory stuff
+int main()
+{
+    int i = 0;
+}
+// set obj and obj->data as NULL after free in the destroy function
+// track->parent = NULL;
