@@ -173,6 +173,7 @@ void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
 }
 
 // Write len elements from src into position pos
+// LOLLL this is DEFINIELTY wrong - needs some MAJOR help and cleaning - the function gives me anxiety
 void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
 {
     size_t total_new_length = pos + len;
@@ -277,9 +278,10 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
     int str_capacity = 50;
     char *ret_indices;
     ret_indices = (char *)malloc(str_capacity * sizeof(char));
+    ret_indices[0] = '\0';
     int curr_string_length = 0;
 
-    for (int i = 0; i < (target->length - ad->length); i++)
+    for (int i = 0; i <= (target->length - ad->length); i++)
     {
         int target_product = 0;
         get_dot_product(target, ad, &target_product, i, i + ad->length, 0, ad->length);
@@ -287,7 +289,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
         if (ratio >= 95)
         {
             char matched_string[32]; // or 64? depends what ds i use?
-            snprintf(matched_string, sizeof(matched_string), "%d,%ld\n", i, i + ad->length);
+            snprintf(matched_string, sizeof(matched_string), "%d,%zu\n", i, i + ad->length);
             int new_data_length = strlen(matched_string);
             if (curr_string_length + new_data_length + 1 > str_capacity)
             {
@@ -298,6 +300,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
                 char *temp = realloc(ret_indices, new_capacity);
                 if (temp == NULL)
                 {
+                    free(ret_indices);
                     return NULL;
                 }
                 ret_indices = temp;
