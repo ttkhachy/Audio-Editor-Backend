@@ -310,6 +310,9 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
             strncpy(ret_indices + curr_string_length, matched_string, new_data_length);
             curr_string_length += new_data_length;
             ret_indices[curr_string_length] = '\0';
+            i += target->length;
+
+            // i think need to change the index to skip the rest of the matched portion?
         }
     }
     // when dynamically allocating the string, DO NOT forget to add the NULL char
