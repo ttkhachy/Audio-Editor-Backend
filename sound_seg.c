@@ -317,7 +317,6 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
     }
     // when dynamically allocating the string, DO NOT forget to add the NULL char
     // when would i free the string tho?
-
     return ret_indices;
     // instead of returning the pointer to the string, could we pass it into the function as a param
     // and then modify it directly?
