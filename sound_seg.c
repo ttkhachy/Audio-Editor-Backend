@@ -315,6 +315,11 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
             // i think need to change the index to skip the rest of the matched portion?
         }
     }
+
+    if (ret_indices[-1] = '\n')
+    {
+        ret_indices[-1] = '\0';
+    }
     // when dynamically allocating the string, DO NOT forget to add the NULL char
     // when would i free the string tho?
     return ret_indices;
