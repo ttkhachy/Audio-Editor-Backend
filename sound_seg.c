@@ -307,7 +307,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
                 str_capacity = new_capacity;
             }
 
-            strncpy(ret_indices + curr_string_length - 1, matched_string, new_data_length);
+            strncpy(ret_indices + curr_string_length, matched_string, new_data_length);
             curr_string_length += new_data_length;
             ret_indices[curr_string_length] = '\0';
             i += ad->length - 1;
