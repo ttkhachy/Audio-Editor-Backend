@@ -7,12 +7,24 @@
 
 struct sound_seg
 {
-    int16_t *data;            // Pointer to raw PCM audio samples
-    size_t length;            // Number of samples
-    size_t start_pos;         // Starting position in the shared buffer (for inserts)
-    struct sound_seg *parent; // Pointer to parent segment (for shared backing)
-    int ref_count;            // Reference count for shared memory tracking
-    size_t capacity;          // total allocated samples
+    int16_t *data; // Pointer to raw PCM audio samples (for parents)
+    size_t length; // Number of samples
+
+    size_t capacity; // total allocated samples
+
+    struct seg_node *head; // a list of logical portions
+    size_t start_pos;      // Starting position in the shared buffer (for inserts)
+    int ref_count;         // Reference count for shared memory tracking
+    struct sound_seg *parent;
+    int child_count;
+};
+
+struct sound_node
+{
+    struct sound_seg *segment; // backing data
+    size_t offset;             // where to start reading from segment->data
+    size_t length;             // how much to read
+    struct seg_node *next;     // next node
 };
 
 int get_file_size(const char *filename, long *size)
@@ -137,7 +149,7 @@ void tr_destroy(struct sound_seg *obj)
         obj->ref_count--;
     }
     free(obj);
-    obj == NULL;
+    obj = NULL;
 }
 
 // Return the length of the segment
@@ -250,9 +262,7 @@ void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, int *co
 
     for (int i = 0; i < end1 - start1; i++)
     {
-        *correlation += (track1->data[start1] * track2->data[start2]);
-        start1++;
-        start2++;
+        *correlation += (track1->data[start1 + i] * track2->data[start2 + i]);
     }
 }
 
@@ -289,7 +299,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
         if (ratio >= 95)
         {
             char matched_string[32]; // or 64? depends what ds i use?
-            snprintf(matched_string, sizeof(matched_string), "%d,%zu\n", i, i + ad->length);
+            snprintf(matched_string, sizeof(matched_string), "%d,%zu\n", i, i + ad->length - 1);
             int new_data_length = strlen(matched_string);
             if (curr_string_length + new_data_length + 1 > str_capacity)
             {
@@ -297,7 +307,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
                 int new_capacity = 0;
                 max(&new_capacity, str_capacity * 2, curr_string_length + new_data_length + 1);
 
-                char *temp = realloc(ret_indices, new_capacity);
+                char *temp = realloc(ret_indices, new_capacity * sizeof(char));
                 if (temp == NULL)
                 {
                     free(ret_indices);
@@ -324,61 +334,38 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
 }
 
 // Insert a portion of src_track into dest_track at position destpos
-void tr_insert(struct sound_seg *src_track,
-               struct sound_seg *dest_track,
-               size_t destpos, size_t srcpos, size_t len)
+void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t destpos, size_t srcpos, size_t len)
 {
 
-    // track->length += len;
+    struct sound_node *new_segment = malloc(sizeof(struct sound_node));
+
+    if (new_segment == NULL)
+    {
+        return;
+    }
+    // set new_seg values
+    new_segment->segment = src_track;
+    new_segment->offset = srcpos;
+    new_segment->length = len;
+    new_segment->next = NULL;
+
+    // increment parent tracks reference related counts
+    src_track->ref_count++;
+    src_track->child_count++;
+
+    // initialise linked_list traversal values
+    struct seg_node *curr = dest_track->head;
+    struct seg_node *prev = NULL;
+
+    size_t pos_tracker = 0;
+
+    // while (curr != NULL && ((pos_tracker + curr->length) <= destpos))
+    // {
+    //     pos_tracker = curr->length;
+    // }
 
     return;
 }
 
-// int main()
-// {
-//     int i = 0;
-
-//     int16_t target_data[] = {
-//         1,
-//         2,
-//         3,
-//         4,
-//         5,
-//         1,
-//         2,
-//         3,
-//         4,
-//         5,
-//         1,
-//         2,
-//         3,
-//         4,
-//         5};
-//     int16_t ad_data[] = {1, 2, 3, 4, 5};
-//     struct sound_seg target;
-//     struct sound_seg ad;
-
-//     target.data = target_data;
-//     target.length = sizeof(target_data) / sizeof(target_data[0]);
-
-//     ad.data = ad_data;
-//     ad.length = sizeof(ad_data) / sizeof(ad_data[0]);
-
-//     // Call the function
-//     char *result = tr_identify(&target, &ad);
-
-//     // Display the result
-//     if (result != NULL)
-//     {
-//         printf("Matched segments:\n%s", result);
-//         free(result); // Don't forget to free it!
-//     }
-//     else
-//     {
-//         printf("No matches found or memory allocation failed.\n");
-//     }
-
-//     return 0;
-// }
 // set obj and obj->data as NULL after free in the destroy function
 // track->parent = NULL;
