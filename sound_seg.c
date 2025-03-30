@@ -252,8 +252,8 @@ bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
 
 // calculates the correlation for a given sound_seg
 // my own helper function
-void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, int *correlation, int start1, int end1,
-                     int start2, int end2)
+void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, size_t *correlation, size_t start1, size_t end1,
+                     size_t start2, size_t end2)
 {
     // should correlation be a long?
     // beware if end1 - start1 != end2 - start2 --> we will have issues
@@ -266,7 +266,7 @@ void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, int *co
     }
 }
 
-void max(int *max, size_t val1, size_t val2)
+void max(size_t *max, size_t val1, size_t val2)
 {
     if (val1 >= val2)
     {
@@ -282,29 +282,29 @@ void max(int *max, size_t val1, size_t val2)
 char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
 {
 
-    int autocorrelation = 0;
+    size_t autocorrelation = 0;
     get_dot_product(ad, ad, &autocorrelation, 0, ad->length, 0, ad->length);
 
-    int str_capacity = 50;
+    size_t str_capacity = 50;
     char *ret_indices;
     ret_indices = (char *)malloc(str_capacity * sizeof(char));
     ret_indices[0] = '\0';
-    int curr_string_length = 0;
-
-    for (int i = 0; i <= (target->length - ad->length); i++)
+    size_t curr_string_length = 0;
+    size_t i = 0;
+    while (i <= (target->length - ad->length))
     {
-        int target_product = 0;
+        size_t target_product = 0;
         get_dot_product(target, ad, &target_product, i, i + ad->length, 0, ad->length);
         double ratio = 100.0 * (double)target_product / (double)autocorrelation;
         if (ratio >= 95)
         {
             char matched_string[32]; // or 64? depends what ds i use?
-            snprintf(matched_string, sizeof(matched_string), "%d,%zu\n", i, i + ad->length - 1);
-            int new_data_length = strlen(matched_string);
+            snprintf(matched_string, sizeof(matched_string), "%zu,%zu\n", i, i + ad->length - 1);
+            size_t new_data_length = strlen(matched_string);
             if (curr_string_length + new_data_length + 1 > str_capacity)
             {
 
-                int new_capacity = 0;
+                size_t new_capacity = 0;
                 max(&new_capacity, str_capacity * 2, curr_string_length + new_data_length + 1);
 
                 char *temp = realloc(ret_indices, new_capacity * sizeof(char));
@@ -320,12 +320,20 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
             strncpy(ret_indices + curr_string_length, matched_string, new_data_length);
             curr_string_length += new_data_length;
             ret_indices[curr_string_length] = '\0';
-            i += ad->length - 1;
+            i += ad->length;
 
             // i think need to change the index to skip the rest of the matched portion?
         }
+        else
+        {
+            i++;
+        }
     }
 
+    if (curr_string_length > 0)
+    {
+        ret_indices[curr_string_length - 1] = '\0';
+    }
     // when dynamically allocating the string, DO NOT forget to add the NULL char
     // when would i free the string tho?
     return ret_indices;
