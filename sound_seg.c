@@ -12,9 +12,9 @@ struct sound_seg
 
     size_t capacity; // total allocated samples
 
-    struct seg_node *head; // a list of logical portions
-    size_t start_pos;      // Starting position in the shared buffer (for inserts)
-    int ref_count;         // Reference count for shared memory tracking
+    struct sound_node *head; // a list of logical portions
+    size_t start_pos;        // Starting position in the shared buffer (for inserts)
+    int ref_count;           // Reference count for shared memory tracking
     struct sound_seg *parent;
     int child_count;
 };
@@ -24,7 +24,7 @@ struct sound_node
     struct sound_seg *segment; // backing data
     size_t offset;             // where to start reading from segment->data
     size_t length;             // how much to read
-    struct seg_node *next;     // next node
+    struct sound_node *next;   // next node
 };
 
 int get_file_size(const char *filename, long *size)
@@ -252,7 +252,7 @@ bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
 
 // calculates the correlation for a given sound_seg
 // my own helper function
-void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, size_t *correlation, size_t start1, size_t end1,
+void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, int64_t *correlation, size_t start1, size_t end1,
                      size_t start2, size_t end2)
 {
     // should correlation be a long?
@@ -264,6 +264,8 @@ void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, size_t 
     {
         *correlation += (track1->data[start1 + i] * track2->data[start2 + i]);
     }
+
+    // normailsed similarity?
 }
 
 void max(size_t *max, size_t val1, size_t val2)
@@ -282,7 +284,7 @@ void max(size_t *max, size_t val1, size_t val2)
 char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
 {
 
-    size_t autocorrelation = 0;
+    int64_t autocorrelation = 0;
     get_dot_product(ad, ad, &autocorrelation, 0, ad->length, 0, ad->length);
 
     size_t str_capacity = 50;
@@ -293,7 +295,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
     size_t i = 0;
     while (i <= (target->length - ad->length))
     {
-        size_t target_product = 0;
+        int64_t target_product = 0;
         get_dot_product(target, ad, &target_product, i, i + ad->length, 0, ad->length);
         double ratio = 100.0 * (double)target_product / (double)autocorrelation;
         if (ratio >= 95)
@@ -374,6 +376,21 @@ void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t
 
     return;
 }
+
+// int main()
+// {
+//     struct sound_seg *sg = tr_init();
+//     int16_t src[] = {1, 2, 3, 4, 5, 6};
+//     tr_write(sg, src, 0, 6);
+
+//     struct sound_seg *ad = tr_init();
+//     int16_t track[] = {2, 3};
+//     tr_write(ad, track, 0, 6);
+
+//     char *ret_str = tr_identify(sg, ad);
+
+//     printf("output: %s", ret_str);
+// }
 
 // set obj and obj->data as NULL after free in the destroy function
 // track->parent = NULL;
