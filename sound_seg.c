@@ -347,32 +347,32 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
 void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t destpos, size_t srcpos, size_t len)
 {
 
-    struct sound_node *new_segment = malloc(sizeof(struct sound_node));
+    // struct sound_node *new_segment = malloc(sizeof(struct sound_node));
 
-    if (new_segment == NULL)
-    {
-        return;
-    }
-    // set new_seg values
-    new_segment->segment = src_track;
-    new_segment->offset = srcpos;
-    new_segment->length = len;
-    new_segment->next = NULL;
-
-    // increment parent tracks reference related counts
-    src_track->ref_count++;
-    src_track->child_count++;
-
-    // initialise linked_list traversal values
-    struct seg_node *curr = dest_track->head;
-    struct seg_node *prev = NULL;
-
-    size_t pos_tracker = 0;
-
-    // while (curr != NULL && ((pos_tracker + curr->length) <= destpos))
+    // if (new_segment == NULL)
     // {
-    //     pos_tracker = curr->length;
+    //     return;
     // }
+    // // set new_seg values
+    // new_segment->segment = src_track;
+    // new_segment->offset = srcpos;
+    // new_segment->length = len;
+    // new_segment->next = NULL;
+
+    // // increment parent tracks reference related counts
+    // src_track->ref_count++;
+    // src_track->child_count++;
+
+    // // initialise linked_list traversal values
+    // struct seg_node *curr = dest_track->head;
+    // struct seg_node *prev = NULL;
+
+    // size_t pos_tracker = 0;
+
+    // // while (curr != NULL && ((pos_tracker + curr->length) <= destpos))
+    // // {
+    // //     pos_tracker = curr->length;
+    // // }
 
     return;
 }
