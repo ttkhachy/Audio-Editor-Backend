@@ -123,6 +123,7 @@ struct sound_seg *tr_init()
     track->ref_count = 1; // default reference count
     track->capacity = 0;  // capacity will be determined on the first write call
     track->parent = NULL;
+    track->head = NULL;
 
     return track;
 }
