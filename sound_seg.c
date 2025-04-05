@@ -12,10 +12,10 @@ struct sound_seg
 
     size_t capacity; // total allocated samples
 
-    struct node *head; // a list of logical portions
-    size_t start_pos;  // Starting position in the shared buffer (for inserts)
-    int ref_count;     // Reference count for shared memory tracking
-    struct sound_seg *parent;
+    struct node *head;        // a list of logical portions
+    size_t start_pos;         // Starting position in the shared buffer (for inserts) - is this necessary?
+    int ref_count;            // Number of parents the track has
+    struct sound_seg *parent; // might delete this
     int child_count;
 };
 
@@ -24,7 +24,8 @@ struct node
     struct sound_seg *segment; // backing data
     size_t offset;             // where to start reading from segment->data
     size_t length;             // how much to read
-    struct node *next;         // next node
+    size_t position_in_data;
+    struct node *next; // next node
 };
 
 int get_file_size(const char *filename, long *size)
@@ -120,8 +121,9 @@ struct sound_seg *tr_init()
     track->data = NULL;      // no buffer yet, allocate in tr_write()
     track->total_length = 0; // no samples yet
     track->start_pos = 0;
-    track->ref_count = 1; // default reference count
+    track->ref_count = 0; // default reference count - why is it one? shouldnt it be 0?
     track->capacity = 0;  // capacity will be determined on the first write call
+    track->child_count = 0;
     track->parent = NULL;
     track->head = NULL;
 
@@ -135,27 +137,25 @@ void tr_destroy(struct sound_seg *obj)
     {
         return;
     }
+
     struct node *curr = obj->head;
     while (curr != NULL)
     {
+        curr->segment->ref_count--;
+        curr->segment->child_count--;
+
         struct node *next = curr->next;
         free(curr);
         curr = next;
     }
 
-    if (obj->ref_count == 1)
+    if (obj->data != NULL)
     {
-        if (obj->data != NULL)
-        {
-            free(obj->data);
-            obj->data = NULL;
-        }
+        free(obj->data);
+        obj->data = NULL;
+        // tr_destroy will only be called at the end of the program
     }
-    else
-    {
-        // dont want to free the data yet since it is being used by an
-        obj->ref_count--;
-    }
+
     free(obj);
     obj = NULL;
 }
@@ -166,7 +166,7 @@ size_t tr_length(struct sound_seg *seg)
 
     if (seg == NULL)
     {
-        return 0; // edge case
+        return 0;
     }
     return seg->total_length;
 }
@@ -185,15 +185,56 @@ void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
         return;
     }
 
-    for (size_t i = 0; i < len; i++)
+    struct node *curr = track->head;
+
+    if (curr == NULL)
     {
-        *(dest + i) = (track->data)[i + pos];
+        for (size_t i = 0; i < len; i++)
+        {
+            dest[i] = track->data[pos + i];
+        }
+        return;
+    }
+
+    // we have had some inserts happen
+    size_t logical_index = 0; // position in the full logical track
+    size_t dest_index = 0;    // index into dest[]
+    while (dest_index < len)
+    {
+        // if there's a node and it covers this logical_index
+        if (curr != NULL && logical_index >= curr->position_in_data &&
+            logical_index < curr->position_in_data + curr->length)
+        {
+            // read from the inserted node
+            size_t offset_in_node = logical_index - curr->position_in_data;
+            if (logical_index >= pos)
+            {
+                dest[dest_index] = curr->segment->data[curr->offset + offset_in_node];
+                dest_index++;
+            }
+            logical_index++;
+        }
+        else
+        {
+            // read from the actual raw data
+            if (logical_index >= pos)
+            {
+                dest[dest_index] = track->data[logical_index];
+                dest_index++;
+            }
+            logical_index++;
+
+            // if we've passed the current node, move to next
+            if (curr != NULL && logical_index >= curr->position_in_data + curr->length)
+            {
+                curr = curr->next;
+            }
+        }
     }
     return;
 }
 
 // Write len elements from src into position pos
-// LOLLL this is DEFINIELTY wrong - needs some MAJOR help and cleaning - the function gives me anxiety
 void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
 {
     size_t total_new_length = pos + len;
@@ -245,6 +286,10 @@ bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
     {
         return false;
     }
+    if (track->child_count > 0)
+    {
+        return false;
+    }
     if (pos + len > track->total_length)
     {
         return false;
@@ -252,30 +297,23 @@ bool tr_delete_range(struct sound_seg *track, size_t pos, size_t len)
 
     memmove(track->data + pos, track->data + pos + len, (track->total_length - pos - len) * sizeof(int16_t));
 
-    // TODO - check if i must delete if the track is shared across multiple sounds?
-
     track->total_length -= len;
     return true;
 }
 
-// calculates the correlation for a given sound_seg
-// my own helper function
+// Calculates the dot product for a given sound_seg. Used to assist in calculating cross correlation
 void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, int64_t *correlation, size_t start1, size_t end1,
                      size_t start2, size_t end2)
 {
-    // should correlation be a long?
-    // beware if end1 - start1 != end2 - start2 --> we will have issues
-
     *correlation = 0;
 
     for (int i = 0; i < end1 - start1; i++)
     {
         *correlation += (track1->data[start1 + i] * track2->data[start2 + i]);
     }
-
-    // normailsed similarity?
 }
 
+// Returns the max of two given values. If equal the default behaviour is to return val1
 void max(size_t *max, size_t val1, size_t val2)
 {
     if (val1 >= val2)
@@ -291,7 +329,6 @@ void max(size_t *max, size_t val1, size_t val2)
 // Returns a string containing <start>,<end> ad pairs in target
 char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
 {
-
     int64_t autocorrelation = 0;
     get_dot_product(ad, ad, &autocorrelation, 0, ad->total_length, 0, ad->total_length);
 
@@ -308,7 +345,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
         double ratio = 100.0 * (double)target_product / (double)autocorrelation;
         if (ratio >= 95)
         {
-            char matched_string[32]; // or 64? depends what ds i use?
+            char matched_string[32];
             snprintf(matched_string, sizeof(matched_string), "%zu,%zu\n", i, i + ad->total_length - 1);
             size_t new_data_length = strlen(matched_string);
             if (curr_string_length + new_data_length + 1 > str_capacity)
@@ -331,8 +368,6 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
             curr_string_length += new_data_length;
             ret_indices[curr_string_length] = '\0';
             i += ad->total_length;
-
-            // i think need to change the index to skip the rest of the matched portion?
         }
         else
         {
@@ -342,10 +377,9 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
 
     if (curr_string_length > 0)
     {
+        // adding the NULL byte for a dynamically allocated string
         ret_indices[curr_string_length - 1] = '\0';
     }
-    // when dynamically allocating the string, DO NOT forget to add the NULL char
-    // when would i free the string tho?
     return ret_indices;
     // instead of returning the pointer to the string, could we pass it into the function as a param
     // and then modify it directly?
@@ -362,43 +396,62 @@ void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t
         return;
     }
     // set new_segment values
-    new_segment->segment = src_track;
+    new_segment->segment = src_track; // the segment from which it reads from is the src -> its a pointer to the entire struct
     new_segment->offset = srcpos;
     new_segment->length = len;
     new_segment->next = NULL;
+    new_segment->position_in_data = destpos;
 
-    dest_track->head = new_segment;
-    // increment parent tracks reference counts
-    src_track->ref_count++;
+    if (dest_track->head == NULL || destpos == 0)
+    {
+        // i.e this is the first insert operation
+        new_segment->next = dest_track->head;
+        dest_track->head = new_segment;
+    }
+    else
+    {
+        size_t position_count = 0;
+        // there is already a preexisting sequence of nodes to consider - we first assume no overlap.
+        struct node *curr = dest_track->head;
+        struct node *prev = NULL;
+        while (curr != NULL && (position_count + curr->length) <= destpos)
+        {
+            position_count += curr->length;
+            prev = curr;
+            curr = curr->next;
+        }
+        if (prev == NULL)
+        {
+            new_segment->next = dest_track->head;
+            dest_track->head = new_segment;
+        }
+        else
+        {
+            prev->next = new_segment;
+            new_segment->next = curr;
+        }
+    }
+
+    src_track->ref_count++; // honestly think these 2 are the same thing...
     src_track->child_count++;
 
-    dest_track->parent = src_track;
+    dest_track->total_length += len;
 
-    size_t new_logical_end = destpos + len;
-    if (new_logical_end > dest_track->total_length)
-        dest_track->total_length = new_logical_end;
-
-    // For a simple shared backing, we may record the parent in the destination track.
-    dest_track->parent = src_track;
-
-    // need to consider 3 cases
-    // 1) inserting in the middle of the node - splitting it
-    // 2) inserting at the start of the node
-    // 3)
+    // probs other things i need to do in this function ?
     return;
 }
 
-int main()
-{
-    struct sound_seg *sg = tr_init();
-    int16_t src[] = {1, 2, 3, 4, 5, 6};
-    tr_write(sg, src, 0, 6);
+// int main()
+// {
+//     struct sound_seg *sg = tr_init();
+//     int16_t src[] = {1, 2, 3, 4, 5, 6};
+//     tr_write(sg, src, 0, 6);
 
-    struct sound_seg *ad = tr_init();
-    int16_t track[] = {2, 3};
-    tr_write(ad, track, 0, 6);
+//     struct sound_seg *ad = tr_init();
+//     int16_t track[] = {2, 3};
+//     tr_write(ad, track, 0, 6);
 
-    char *ret_str = tr_identify(sg, ad);
+//     char *ret_str = tr_identify(sg, ad);
 
-    printf("output: %s", ret_str);
-}
+//     printf("output: %s", ret_str);
+// }
