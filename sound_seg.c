@@ -187,43 +187,52 @@ void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
         return;
     }
 
-    size_t logical_index = 0; // index for final logical stream
-    size_t dest_index = 0;    // index for dest buffer
-    struct node *curr = track->head;
+    size_t logical_index = 0; // full logical sequence position
+    size_t dest_index = 0;
 
     while (dest_index < len)
     {
-        // check if we are inside a node (insertion)
-        if (curr != NULL &&
-            logical_index >= curr->position_in_data &&
-            logical_index < curr->position_in_data + curr->length)
+        bool from_node = false;
+
+        // search all nodes to see if one covers logical_index
+        struct node *n = track->head;
+        while (n != NULL)
         {
-            size_t offset = logical_index - curr->position_in_data;
-            dest[dest_index++] = curr->segment->data[curr->offset + offset];
-            logical_index++;
+            if (logical_index >= n->position_in_data &&
+                logical_index < n->position_in_data + n->length)
+            {
+                size_t offset = logical_index - n->position_in_data;
+                if (logical_index >= pos)
+                {
+                    dest[dest_index++] = n->segment->data[n->offset + offset];
+                }
+                logical_index++;
+                from_node = true;
+                break;
+            }
+            n = n->next;
         }
-        else
+
+        if (!from_node)
         {
-            // calculate raw index by subtracting length of all prior inserts
-            size_t raw_index = logical_index;
+            // Count how many inserts occurred *before* this logical_index
+            size_t shift = 0;
             struct node *temp = track->head;
             while (temp != NULL)
             {
                 if (temp->position_in_data < logical_index)
                 {
-                    raw_index -= temp->length;
+                    shift += temp->length;
                 }
                 temp = temp->next;
             }
 
-            dest[dest_index++] = track->data[raw_index];
-            logical_index++;
-
-            // skip current node if we’ve passed it
-            if (curr != NULL && logical_index >= curr->position_in_data + curr->length)
+            size_t data_index = logical_index - shift;
+            if (logical_index >= pos)
             {
-                curr = curr->next;
+                dest[dest_index++] = track->data[data_index];
             }
+            logical_index++;
         }
     }
     return;
