@@ -174,6 +174,8 @@ size_t tr_length(struct sound_seg *seg)
 // Read len elements from position pos into dest
 void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
 {
+    //  i think there is somethin wrong with the way i am reading the index
+    // like i am skipping past the data in the raw as well? need to confirm
 
     if (track->data == NULL)
     {
@@ -185,46 +187,39 @@ void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
         return;
     }
 
+    size_t logical_index = 0; // index for final logical stream
+    size_t dest_index = 0;    // index for dest buffer
     struct node *curr = track->head;
 
-    if (curr == NULL)
-    {
-        for (size_t i = 0; i < len; i++)
-        {
-            dest[i] = track->data[pos + i];
-        }
-        return;
-    }
-
-    // we have had some inserts happen
-    size_t logical_index = 0; // position in the full logical track
-    size_t dest_index = 0;    // index into dest[]
     while (dest_index < len)
     {
-        // if there's a node and it covers this logical_index
-        if (curr != NULL && logical_index >= curr->position_in_data &&
+        // check if we are inside a node (insertion)
+        if (curr != NULL &&
+            logical_index >= curr->position_in_data &&
             logical_index < curr->position_in_data + curr->length)
         {
-            // read from the inserted node
-            size_t offset_in_node = logical_index - curr->position_in_data;
-            if (logical_index >= pos)
-            {
-                dest[dest_index] = curr->segment->data[curr->offset + offset_in_node];
-                dest_index++;
-            }
+            size_t offset = logical_index - curr->position_in_data;
+            dest[dest_index++] = curr->segment->data[curr->offset + offset];
             logical_index++;
         }
         else
         {
-            // read from the actual raw data
-            if (logical_index >= pos)
+            // calculate raw index by subtracting length of all prior inserts
+            size_t raw_index = logical_index;
+            struct node *temp = track->head;
+            while (temp != NULL)
             {
-                dest[dest_index] = track->data[logical_index];
-                dest_index++;
+                if (temp->position_in_data < logical_index)
+                {
+                    raw_index -= temp->length;
+                }
+                temp = temp->next;
             }
+
+            dest[dest_index++] = track->data[raw_index];
             logical_index++;
 
-            // if we've passed the current node, move to next
+            // skip current node if we’ve passed it
             if (curr != NULL && logical_index >= curr->position_in_data + curr->length)
             {
                 curr = curr->next;
@@ -443,15 +438,33 @@ void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t
 
 // int main()
 // {
-//     struct sound_seg *sg = tr_init();
-//     int16_t src[] = {1, 2, 3, 4, 5, 6};
-//     tr_write(sg, src, 0, 6);
+//     struct sound_seg *base = tr_init();
+//     int16_t base_data[] = {10, 11, 12, 13, 14, 15, 16, 17};
+//     tr_write(base, base_data, 0, 8);
 
-//     struct sound_seg *ad = tr_init();
-//     int16_t track[] = {2, 3};
-//     tr_write(ad, track, 0, 6);
+//     struct sound_seg *insert = tr_init();
+//     int16_t insert_data[] = {99, 98};
+//     tr_write(insert, insert_data, 0, 2);
+//     tr_insert(insert, base, 2, 0, 2);
 
-//     char *ret_str = tr_identify(sg, ad);
+//     struct sound_seg *second = tr_init();
+//     int16_t second_data[] = {70, 71, 72};
+//     tr_write(second, second_data, 0, 3);
+//     tr_insert(second, base, 6, 0, 3); // note: inserting into 'base'
 
-//     printf("output: %s", ret_str);
+//     int16_t result[13];
+//     tr_read(base, result, 0, 13);
+
+//     printf("Final logical track after inserts:\n");
+//     for (size_t i = 0; i < 13; i++)
+//     {
+//         printf("%d ", result[i]);
+//     }
+//     printf("\n");
+
+//     tr_destroy(base);
+//     tr_destroy(second);
+//     tr_destroy(insert);
+
+//     return 0;
 // }
