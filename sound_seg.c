@@ -4,34 +4,31 @@ int get_file_size(const char *filename, long *size)
 {
     if (filename == NULL || size == NULL)
     {
-        return -1; // invalid arguments - although i think i assume its always correct?
+        return -1;
     }
 
     FILE *file = fopen(filename, "rb");
     if (file == NULL)
     {
-        return -1; // idk if i need to account for this? i think its assumed that it will be ok?
+        return -1;
     }
 
     fseek(file, 0, SEEK_END);
     *size = ftell(file); // get file position (size)
 
-    fclose(file); // cant forget the close
+    fclose(file); // dont forget the close the file
     return 0;
 }
 
 // Load a WAV file into buffer
 void wav_load(const char *filename, int16_t *dest)
 {
-    // i think the header is 44 bytes long
-    // need to read the file from filename -> skip the first 44 bytes and then copy the remaining data
-    // (which should be the raw audio data into dest)
     long file_size;
     get_file_size(filename, &file_size);
-    size_t num_samples = (file_size - 44) / sizeof(int16_t);
+    size_t num_samples = (file_size - WAV_HEADER_SIZE) / sizeof(int16_t);
 
     FILE *fptr = fopen(filename, "rb"); // assuming IO operations are always successful.
-    fseek(fptr, 44, SEEK_SET);
+    fseek(fptr, WAV_HEADER_SIZE, SEEK_SET);
 
     fread(dest, sizeof(int16_t), num_samples, fptr);
     fclose(fptr);
@@ -41,11 +38,6 @@ void wav_load(const char *filename, int16_t *dest)
 // Create/write a WAV file from buffer
 void wav_save(const char *fname, int16_t *src, size_t len)
 {
-    // fname maybe already exist or need to be created
-    // src contains the audio sample
-    // need to create the necessary header also (44 bytes) - hw do i do this?
-    // the song will always be PCM, 16 bits per sample, mono, 8000Hz sample rate.?  -useful for the header
-
     FILE *fptr = fopen(fname, "wb");
 
     // WAV Header values
@@ -84,7 +76,7 @@ void wav_save(const char *fname, int16_t *src, size_t len)
 // Initialize a new sound_seg object
 struct sound_seg *tr_init()
 {
-    struct sound_seg *track = malloc(sizeof(struct sound_seg));
+    struct sound_seg *track = (struct sound_seg *)malloc(sizeof(struct sound_seg));
     if (track == NULL)
     {
         return NULL;
@@ -93,8 +85,8 @@ struct sound_seg *tr_init()
     track->data = NULL;      // no buffer yet, allocate in tr_write()
     track->total_length = 0; // no samples yet
     track->start_pos = 0;
-    track->ref_count = 0; // default reference count - why is it one? shouldnt it be 0?
-    track->capacity = 0;  // capacity will be determined on the first write call
+    track->ref_count = 0;
+    track->capacity = 0; // capacity will be determined on the first write call
     track->child_count = 0;
     track->parent = NULL;
     track->head = NULL;
@@ -146,9 +138,6 @@ size_t tr_length(struct sound_seg *seg)
 // Read len elements from position pos into dest
 void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
 {
-    //  i think there is somethin wrong with the way i am reading the index
-    // like i am skipping past the data in the raw as well? need to confirm
-
     if (track->data == NULL)
     {
         return;
@@ -216,7 +205,7 @@ void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
     {
         // need to initialise struct values and malloc space for the samples
         track->capacity = total_new_length;
-        track->data = malloc(track->capacity * sizeof(int16_t));
+        track->data = (int16_t *)malloc(track->capacity * sizeof(int16_t));
         if (track->data == NULL)
         {
             // i.e an error occured allocating space on the heap
@@ -367,7 +356,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
 void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t destpos, size_t srcpos, size_t len)
 {
 
-    struct node *new_segment = malloc(sizeof(struct node));
+    struct node *new_segment = (struct node *)malloc(sizeof(struct node));
 
     if (new_segment == NULL)
     {
