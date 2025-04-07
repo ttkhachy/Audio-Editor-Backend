@@ -25,10 +25,10 @@ void wav_load(const char *filename, int16_t *dest)
 {
     long file_size;
     get_file_size(filename, &file_size);
-    size_t num_samples = (file_size - WAV_HEADER_SIZE) / sizeof(int16_t);
+    size_t num_samples = (file_size - 44) / sizeof(int16_t);
 
     FILE *fptr = fopen(filename, "rb"); // assuming IO operations are always successful.
-    fseek(fptr, WAV_HEADER_SIZE, SEEK_SET);
+    fseek(fptr, 44, SEEK_SET);
 
     fread(dest, sizeof(int16_t), num_samples, fptr);
     fclose(fptr);
