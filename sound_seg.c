@@ -1,32 +1,4 @@
-#include <stdint.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdio.h>
-
-struct sound_seg
-{
-    int16_t *data;       // Pointer to raw PCM audio samples (for parents)
-    size_t total_length; // Number of samples
-
-    size_t capacity; // total allocated samples
-
-    struct node *head;        // a list of logical portions
-    size_t start_pos;         // Starting position in the shared buffer (for inserts) - is this necessary?
-    int ref_count;            // Number of parents the track has
-    struct sound_seg *parent; // might delete this
-    int child_count;
-};
-
-struct node
-{
-    struct sound_seg *segment; // backing data
-    size_t offset;             // where to start reading from segment->data
-    size_t length;             // how much to read
-    size_t position_in_data;
-    struct node *next; // next node
-};
+#include "sound_struct.h"
 
 int get_file_size(const char *filename, long *size)
 {
@@ -187,52 +159,50 @@ void tr_read(struct sound_seg *track, int16_t *dest, size_t pos, size_t len)
         return;
     }
 
-    size_t logical_index = 0; // full logical sequence position
-    size_t dest_index = 0;
+    struct node *curr = track->head;
 
+    if (curr == NULL)
+    {
+        for (size_t i = 0; i < len; i++)
+        {
+            dest[i] = track->data[pos + i];
+        }
+        return;
+    }
+
+    // we have had some inserts happen
+    size_t logical_index = 0; // position in the full logical track
+    size_t dest_index = 0;    // index into dest[]
     while (dest_index < len)
     {
-        bool from_node = false;
-
-        // search all nodes to see if one covers logical_index
-        struct node *n = track->head;
-        while (n != NULL)
+        // if there's a node and it covers this logical_index
+        if (curr != NULL && logical_index >= curr->position_in_data &&
+            logical_index < curr->position_in_data + curr->length)
         {
-            if (logical_index >= n->position_in_data &&
-                logical_index < n->position_in_data + n->length)
-            {
-                size_t offset = logical_index - n->position_in_data;
-                if (logical_index >= pos)
-                {
-                    dest[dest_index++] = n->segment->data[n->offset + offset];
-                }
-                logical_index++;
-                from_node = true;
-                break;
-            }
-            n = n->next;
-        }
-
-        if (!from_node)
-        {
-            // Count how many inserts occurred *before* this logical_index
-            size_t shift = 0;
-            struct node *temp = track->head;
-            while (temp != NULL)
-            {
-                if (temp->position_in_data < logical_index)
-                {
-                    shift += temp->length;
-                }
-                temp = temp->next;
-            }
-
-            size_t data_index = logical_index - shift;
+            // read from the inserted node
+            size_t offset_in_node = logical_index - curr->position_in_data;
             if (logical_index >= pos)
             {
-                dest[dest_index++] = track->data[data_index];
+                dest[dest_index] = curr->segment->data[curr->offset + offset_in_node];
+                dest_index++;
             }
             logical_index++;
+        }
+        else
+        {
+            // read from the actual raw data
+            if (logical_index >= pos)
+            {
+                dest[dest_index] = track->data[logical_index];
+                dest_index++;
+            }
+            logical_index++;
+
+            // if we've passed the current node, move to next
+            if (curr != NULL && logical_index >= curr->position_in_data + curr->length)
+            {
+                curr = curr->next;
+            }
         }
     }
     return;
@@ -249,15 +219,14 @@ void tr_write(struct sound_seg *track, int16_t *src, size_t pos, size_t len)
         track->data = malloc(track->capacity * sizeof(int16_t));
         if (track->data == NULL)
         {
-            // i.e an error occures
+            // i.e an error occured allocating space on the heap
             return;
         }
     }
     else if (total_new_length > track->capacity)
     {
         size_t new_capacity = track->capacity;
-        // increase the capacity by doubling it until it is sufficenet to handle to whole new length
-        // see if this is in line with what is in the lectures?
+        // increase the capacity by doubling it until it is sufficient to handle to whole new length
         while (new_capacity < total_new_length)
         {
             new_capacity *= 2;
@@ -313,6 +282,7 @@ void get_dot_product(struct sound_seg *track1, struct sound_seg *track2, int64_t
 
     for (int i = 0; i < end1 - start1; i++)
     {
+        // sum the product of corresponding samples from the two tracks
         *correlation += (track1->data[start1 + i] * track2->data[start2 + i]);
     }
 }
@@ -344,14 +314,18 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
     size_t i = 0;
     while (i <= (target->total_length - ad->total_length))
     {
+        // get the dot product between 'ad' and the current subsegment of 'target'
         int64_t target_product = 0;
         get_dot_product(target, ad, &target_product, i, i + ad->total_length, 0, ad->total_length);
         double ratio = 100.0 * (double)target_product / (double)autocorrelation;
         if (ratio >= 95)
         {
+            // if the correlation is greater than or equal to the desired percentage of 95, we create a new match string
             char matched_string[32];
             snprintf(matched_string, sizeof(matched_string), "%zu,%zu\n", i, i + ad->total_length - 1);
             size_t new_data_length = strlen(matched_string);
+
+            // if the length exceeds the capacity, we must dynamically resize the buffer
             if (curr_string_length + new_data_length + 1 > str_capacity)
             {
 
@@ -371,6 +345,8 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
             strncpy(ret_indices + curr_string_length, matched_string, new_data_length);
             curr_string_length += new_data_length;
             ret_indices[curr_string_length] = '\0';
+
+            // skip by the length of 'ad' to avoid overlapping matches
             i += ad->total_length;
         }
         else
@@ -384,9 +360,7 @@ char *tr_identify(struct sound_seg *target, struct sound_seg *ad)
         // adding the NULL byte for a dynamically allocated string
         ret_indices[curr_string_length - 1] = '\0';
     }
-    return ret_indices;
-    // instead of returning the pointer to the string, could we pass it into the function as a param
-    // and then modify it directly?
+    return ret_indices; // it is the caller's responsibility to free this
 }
 
 // Insert a portion of src_track into dest_track at position destpos
@@ -400,7 +374,7 @@ void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t
         return;
     }
     // set new_segment values
-    new_segment->segment = src_track; // the segment from which it reads from is the src -> its a pointer to the entire struct
+    new_segment->segment = src_track;
     new_segment->offset = srcpos;
     new_segment->length = len;
     new_segment->next = NULL;
@@ -415,7 +389,6 @@ void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t
     else
     {
         size_t position_count = 0;
-        // there is already a preexisting sequence of nodes to consider - we first assume no overlap.
         struct node *curr = dest_track->head;
         struct node *prev = NULL;
         while (curr != NULL && (position_count + curr->length) <= destpos)
@@ -426,54 +399,22 @@ void tr_insert(struct sound_seg *src_track, struct sound_seg *dest_track, size_t
         }
         if (prev == NULL)
         {
+            // we are inserting at the start of the linked list
             new_segment->next = dest_track->head;
             dest_track->head = new_segment;
         }
         else
         {
+            // we are inserting in between two existing nodes or at the end of the list if curr == NULL
             prev->next = new_segment;
             new_segment->next = curr;
         }
     }
 
-    src_track->ref_count++; // honestly think these 2 are the same thing...
+    src_track->ref_count++;
     src_track->child_count++;
 
     dest_track->total_length += len;
 
-    // probs other things i need to do in this function ?
     return;
 }
-
-// int main()
-// {
-//     struct sound_seg *base = tr_init();
-//     int16_t base_data[] = {10, 11, 12, 13, 14, 15, 16, 17};
-//     tr_write(base, base_data, 0, 8);
-
-//     struct sound_seg *insert = tr_init();
-//     int16_t insert_data[] = {99, 98};
-//     tr_write(insert, insert_data, 0, 2);
-//     tr_insert(insert, base, 2, 0, 2);
-
-//     struct sound_seg *second = tr_init();
-//     int16_t second_data[] = {70, 71, 72};
-//     tr_write(second, second_data, 0, 3);
-//     tr_insert(second, base, 6, 0, 3); // note: inserting into 'base'
-
-//     int16_t result[13];
-//     tr_read(base, result, 0, 13);
-
-//     printf("Final logical track after inserts:\n");
-//     for (size_t i = 0; i < 13; i++)
-//     {
-//         printf("%d ", result[i]);
-//     }
-//     printf("\n");
-
-//     tr_destroy(base);
-//     tr_destroy(second);
-//     tr_destroy(insert);
-
-//     return 0;
-// }
